@@ -1,0 +1,22 @@
+#game_board {
+}
+.ttt_td {
+    text-align: center;
+    width: 100px;
+    height: 100px;
+}
+table .ttt_td {
+    border: 1px solid black;
+}
+table .ttt_tr:first-child .ttt_td {
+    border-top: 0;
+}
+table .ttt_tr:last-child .ttt_td {
+    border-bottom: 0;
+}
+table .ttt_tr .ttt_td:first-child {
+    border-left: 0;
+}
+table .ttt_tr .ttt_td:last-child {
+    border-right: 0;
+}
