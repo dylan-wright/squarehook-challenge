@@ -15,15 +15,19 @@ var ComputerPlayer = Player.extend({
 
 var Game = Backbone.Model.extend({
     defaults: {
-        dimensions: 4,
-        board: []
+        dimensions: 3,
+        board: [],
+        turn: "X"
     },
     
     initialize: function () {
         //create players
         this.set({human: new HumanPlayer()});
         this.set({computer: new ComputerPlayer()});
+        this.start();
+    },
 
+    start: function() {
         //create board using current dimensions
         //2d array of spaces
         for (i = 0; i < this.get("dimensions"); i++) {
@@ -34,9 +38,28 @@ var Game = Backbone.Model.extend({
         }
     },
 
+    getSpaceFromId(id) {
+        return this.get("board")[Math.trunc(id / this.get("dimensions"))][id % this.get("dimensions")];
+    },
+
     onClick: function(event) {
         console.log("You clicked on id: "+event.target.id+" text: "+event.target.innerHTML);
-    },
+
+        var space = this.getSpaceFromId(Number(event.target.id));
+        if (space.text == "" && this.get("turn") == this.get("human").get("letter")) {
+            space.text = this.get("turn");
+
+            //switch turn
+            if (this.get("turn") == "X") {
+                this.set({turn: "O"});
+            } else {
+                this.set({turn: "X"});
+            }
+
+            //tell computer to choose
+            //TODO: add pause?
+        }
+    }
 });
 
 var BoardView = Backbone.View.extend({
@@ -60,6 +83,7 @@ var BoardView = Backbone.View.extend({
     onClick: function(event) {
         //delegate to game model
         this.model.onClick(event);
+        this.render();
     }
 });
 
