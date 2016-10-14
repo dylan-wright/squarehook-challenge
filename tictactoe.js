@@ -1,3 +1,13 @@
+/*  Dylan Wright
+ *  dylan.wright@dcwright.xyz
+ *  https://github.com/dylan-wright/squarehook-challenge/
+ *
+ *  Squarehook Challenge: Tic Tac Toe
+ *      tictactoe.js
+ *          Javascript implementing tictactoe game and an unbeatable
+ *          AI opponent
+ */
+
 /*  TranspositionTable
  *      optimization of state space. boards that are the same but reached
  *      through seperate sequence of moves can be represented by a single
@@ -337,6 +347,10 @@ var Game = Backbone.Model.extend({
         this.start();
     },
 
+    /*  start
+     *      initializes game board
+     *      with X/O start choice
+     */
     start: function() {
         //create board using current dimensions
         //2d array of spaces
@@ -354,16 +368,23 @@ var Game = Backbone.Model.extend({
         board[0][1].text = "O";
     },
 
-    getSpaceFromId(id) {
+    /*  getSpaceFromId
+     *      returns the space with specified id
+     */
+    getSpaceFromId: function(id) {
         return this.get("board")[Math.trunc(id / this.get("dimensions"))][id % this.get("dimensions")];
     },
 
+    /*  onClick
+     *      handles click events
+     */
     onClick: function(event) {
         var i;
         var space = this.getSpaceFromId(Number(event.target.id));
         stateTree = this.get("stateTree");
         board = this.get("board");
 
+        //if tree is terminal or filled then reset the game
         if (stateTree.isTerminal() || stateTree.isFilled()) {
             this.set({"stateTree": this.get("stateTreeRoot")});
             this.set({"turn": " "});
@@ -376,7 +397,10 @@ var Game = Backbone.Model.extend({
 
             board[0][0].text = "X";
             board[0][1].text = "O";
-        } else if (this.get("turn") == " ") {
+        } 
+        //if player letter hasnt been chosen accept clicks until it has been
+        //  if the player selects O let the computer play
+        else if (this.get("turn") == " ") {
             if (space.text != " ") {
                 this.set({"turn": "X"});
                 this.get("human").set({"letter": space.text});
@@ -389,7 +413,11 @@ var Game = Backbone.Model.extend({
                     this.computerPlay();
                 }
             }
-        } else if (space.text == " " && this.get("turn") == this.get("human").get("letter")) {
+        } 
+        //if it is the players turn and she has selected a blank space
+        //  mark it
+        //  if the game isnt over let the computer play
+        else if (space.text == " " && this.get("turn") == this.get("human").get("letter")) {
             space.text = this.get("turn");
 
             this.switchTurn();
@@ -410,6 +438,11 @@ var Game = Backbone.Model.extend({
         }
     },
     
+    /*  computerPlay
+     *      let the computer select a move using the State.getOptimalMove
+     *      method
+     *      prefer moves that lead to a win, then a tie
+     */
     computerPlay: function () { 
         //TODO: add pause?
         var score;
@@ -467,6 +500,9 @@ var Game = Backbone.Model.extend({
         }
     },
 
+    /*  boardToString
+     *      return a string representation of the board
+     */
     boardToString: function () {
         var i, j;
         var s = "";
@@ -500,6 +536,12 @@ var BoardView = Backbone.View.extend({
         this.$el.html(html);
     },
 
+    /*  getScoreIfOver
+     *      if the game is over return the score
+     *      -1: O won
+     *       1: X won
+     *      undefined: game not over
+     */
     getScoreIfOver: function () {
         stateTree = this.model.get("stateTree");
 
@@ -510,6 +552,11 @@ var BoardView = Backbone.View.extend({
         }
     },
 
+    /*  getStatus
+     *      return a string representing the current game status
+     *      used by AppView to modify MessageView to tell player
+     *      what to do or who won
+     */
     getStatus: function () {
         var score = this.getScoreIfOver();
 
@@ -530,6 +577,9 @@ var BoardView = Backbone.View.extend({
         }
     },
     
+    /*  onClick
+     *      handle click events
+     */
     onClick: function(event) {
         //delegate to game model
         this.model.onClick(event);
