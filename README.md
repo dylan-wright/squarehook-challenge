@@ -19,4 +19,6 @@ win or tie.
 Used a transposition table to optimize generation of states. Entries in table
 are indexed by the corresponding State string. If the State is already in the
 table the table instance is used instead of generating the node's children
-again
+again. This optimization reduces state space memory usage from ~800 Mb to 
+~4 Mb (according to Google chrome dev tools profiler). Also reduces load time
+
