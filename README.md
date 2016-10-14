@@ -1,4 +1,8 @@
 # squarehook-challenge
+## Usage/Installation
+- Active at [dcwright.xyz/squarehook/](https://dcwright.xyz/squarehook/)
+- Alternativly clone onto own system and serve
+
 ## Frameworks
 - Backbone.js
 
