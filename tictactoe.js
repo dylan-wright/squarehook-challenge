@@ -324,7 +324,7 @@ var Game = Backbone.Model.extend({
     defaults: {
         dimensions: 3,
         board: [],
-        turn: "X"
+        turn: " "
     },
     
     initialize: function () {
@@ -340,12 +340,18 @@ var Game = Backbone.Model.extend({
     start: function() {
         //create board using current dimensions
         //2d array of spaces
-        for (i = 0; i < this.get("dimensions"); i++) {
-            this.get("board").push([]);
-            for (j = 0; j < this.get("dimensions"); j++) {
-                this.get("board")[i].push({"text": " ", "id": i*this.get("dimensions") + j});
+        board = this.get("board");
+        dimensions = this.get("dimensions");
+
+        for (i = 0; i < dimensions; i++) {
+            board.push([]);
+            for (j = 0; j < dimensions; j++) {
+                board[i].push({"text": " ", "id": i*dimensions + j});
             }
         }
+        
+        board[0][0].text = "X";
+        board[0][1].text = "O";
     },
 
     getSpaceFromId(id) {
@@ -360,22 +366,33 @@ var Game = Backbone.Model.extend({
 
         if (stateTree.isTerminal() || stateTree.isFilled()) {
             this.set({"stateTree": this.get("stateTreeRoot")});
-            this.set({"turn": "X"});
+            this.set({"turn": " "});
 
             for (i = 0; i < board.length; i++) {
                 for (j = 0; j < board[i].length; j++) {
                     board[i][j].text = " ";
                 }
             }
+
+            board[0][0].text = "X";
+            board[0][1].text = "O";
+        } else if (this.get("turn") == " ") {
+            if (space.text != " ") {
+                this.set({"turn": "X"});
+                this.get("human").set({"letter": space.text});
+                this.get("computer").set({"letter": space.text == "X" ? "O" : "X"});
+
+                board[0][0].text = " ";
+                board[0][1].text = " ";
+
+                if (this.get("human").get("letter") == "O") {
+                    this.computerPlay();
+                }
+            }
         } else if (space.text == " " && this.get("turn") == this.get("human").get("letter")) {
             space.text = this.get("turn");
 
-            //switch turn
-            if (this.get("turn") == "X") {
-                this.set({turn: "O"});
-            } else {
-                this.set({turn: "X"});
-            }
+            this.switchTurn();
 
             //update stateTree to use new root (should be in children)
             for (i = 0; i < stateTree.children.length; i++) {
@@ -385,37 +402,68 @@ var Game = Backbone.Model.extend({
                 }
             }
 
-            //TODO: add pause?
-            var score;
-
-            for (i = 0; i < stateTree.children.length; i++) {
-                score = stateTree.children[i].getOptimalMove(this.get("turn") == "O" ? "X" : "O");
-                
-                if (score == 1 && this.get("turn") == "X") {
-                    stateTree = stateTree.children[i];
-                    break;
-                } else if ((score == -1 || score == 0) && this.get("turn") == "O") {
-                    stateTree = stateTree.children[i];
-                    break;
-                }
-            }
-
             this.set({"stateTree": stateTree});
 
-            for (i = 0; i < stateTree.board.length; i++) {
-                for (j = 0; j < stateTree.board[i].length; j++) {
-                    if (stateTree.board[i][j] != this.get("board")[i][j].text) {
-                        this.get("board")[i][j].text = this.get("computer").get("letter");
-                    }
+            if (!stateTree.isTerminal() && !stateTree.isFilled()) {
+                this.computerPlay();
+            }
+        }
+    },
+    
+    computerPlay: function () { 
+        //TODO: add pause?
+        var score;
+        stateTree = this.get("stateTree");
+        var candidateStateTree;
+        var stateFound = false;
+
+        for (i = 0; i < stateTree.children.length; i++) {
+            score = stateTree.children[i].getOptimalMove(this.get("turn") == "O" ? "X" : "O");
+            
+            if ((score == 1 || score == 0) && this.get("turn") == "X") {
+                if (score == 0 && candidateStateTree == undefined) {
+                    candidateStateTree = stateTree.children[i];
+                } else {
+                    stateTree = stateTree.children[i];
+                    stateFound = true;
+                    break;
+                }
+            } else if ((score == -1 || score == 0) && this.get("turn") == "O") {
+                if (score == 0 && candidateStateTree == undefined) {
+                    candidateStateTree = stateTree.children[i];
+                } else {
+                    stateTree = stateTree.children[i];
+                    stateFound = true;
+                    break;
                 }
             }
+        }
 
-            if (this.get("turn") == "X") {
-                this.set({turn: "O"});
-            } else {
-                this.set({turn: "X"});
+        if (!stateFound) {
+            stateTree = candidateStateTree;
+        }
+
+        this.set({"stateTree": stateTree});
+
+        for (i = 0; i < stateTree.board.length; i++) {
+            for (j = 0; j < stateTree.board[i].length; j++) {
+                if (stateTree.board[i][j] != this.get("board")[i][j].text) {
+                    this.get("board")[i][j].text = this.get("computer").get("letter");
+                }
             }
+        }
 
+        this.switchTurn();
+    },
+
+    /*  switchTurn
+     *      switch the turn letter
+     */
+    switchTurn: function () {
+        if (this.get("turn") == "X") {
+            this.set({turn: "O"});
+        } else {
+            this.set({turn: "X"});
         }
     },
 
@@ -461,6 +509,26 @@ var BoardView = Backbone.View.extend({
             return 0;
         }
     },
+
+    getStatus: function () {
+        var score = this.getScoreIfOver();
+
+        if (score == undefined) {
+            if (this.model.get("turn") == " ") {
+                return "Choose a letter to play as";
+            } else {
+                return "";
+            }
+        } else {
+            if (score == -1) {
+                return "O player won. Click to play again";
+            } else if (score == 0) {
+                return "Tie. Click to play again";
+            } else {
+                return "X player won. Click to play again";
+            }
+        }
+    },
     
     onClick: function(event) {
         //delegate to game model
@@ -482,16 +550,8 @@ var MessageView =  Backbone.View.extend({
         this.$el.html(html);
     },
 
-    updateMessage: function (score) {
-        if (score == 0) {
-            this.message = "Game over. Tie. Click to play again";
-        } else if (score == -1) {
-            this.message = "Game over. Computer wins. Click to play again";
-        } else if (score == 1) {
-            this.message = "Game over. Player wins. Click to play again";
-        } else {
-            this.message = "";
-        }
+    updateMessage: function (gameStatus) {
+        this.message = gameStatus;
     }
 });
 
@@ -506,7 +566,7 @@ var AppView = Backbone.View.extend({
     },
 
     render: function() {
-        this.message.updateMessage(this.board.getScoreIfOver());
+        this.message.updateMessage(this.board.getStatus());
 
         this.board.render();
         this.message.render();
