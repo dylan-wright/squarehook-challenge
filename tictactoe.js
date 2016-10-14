@@ -1,3 +1,310 @@
+/*  TranspositionTable
+ *      optimization of state space. boards that are the same but reached
+ *      through seperate sequence of moves can be represented by a single
+ *      object in the state tree
+ */
+var TranspositionTable = function () {
+    /* table - hold objects of form: {stateString: ".........", 
+     *                                state: State object}
+     */
+    var table = [];
+
+    return {
+        init: function () {
+        },
+        
+        /*  isIn:
+         *      determine if stateString is already in the table
+         *
+         *      I: a 9 character string representing a board
+         *      O: a bool indicating if the state was found
+         */
+        isIn: function (stateString) {
+            var i;
+
+            for (i = 0; i < table.length; i++) {
+                if (table[i].stateString == stateString) {
+                    return true;
+                }
+            }
+
+            return false;
+        },
+
+        /*  add:
+         *      add a state to the transposition table
+         *
+         *      I: a State object
+         *      O: state added to table. no return
+         */
+        add: function (state) {
+            table.push({"stateString": state.toString(), "state": state});
+        },
+
+        /*  get:
+         *      retrive the state represented by stateString
+         *
+         *      I: a 9 character string representing a board
+         *      O: the State object represented by stateString
+         *         if not found returns undefined
+         */
+        get: function (stateString) {
+            var i;
+
+            for (i = 0; i < table.length; i++) {
+                if (table[i].stateString == stateString) {
+                    return table[i].state;
+                }
+            }
+        },
+    }
+};
+
+/*  State
+ *      object representing a node in the state space tree
+ */
+var State = function() {
+    return {
+        /*  init
+         *      initialize the State object
+         *
+         *      I: the dimensionality of the game board to be constructed
+         *      O: create empty board and children lists
+         *         populate board list with " "
+         *         return the State to support chained calls
+         */
+        init: function(dimension) {
+            var i, j;
+            this.board = [];
+            this.children = [];
+            
+            for (i = 0; i < dimension; i++) {
+                this.board.push([]);
+                for (j = 0; j < dimension; j++) {
+                    this.board[i].push(" ");
+                }
+            }
+            return this;
+        },
+
+        /*  copySet
+         *      copy a board of another State and change a space
+         *
+         *      I: parentBoard-board from another State object
+         *         r-the row of the board to be changed
+         *         c-the column of the board to be changed
+         *         letter-the letter [XO] to be put into the board
+         *      O: letter inserted into the new State board
+         *         return the State to support chained calls
+         */
+        copySet: function(parentBoard, r, c, letter) {
+            var i, j;
+            this.board = [];
+            this.children = [];
+
+            for (i = 0; i < parentBoard.length; i++) {
+                this.board.push([]);
+                for (j = 0; j < parentBoard[i].length; j++) {
+                    this.board[i].push(parentBoard[i][j]);
+                }
+            }
+
+            this.board[r][c] = letter;
+            
+            return this;
+        },
+
+        /*  generateChildren
+         *      recursively generate children of the State by generating a
+         *      new State for each empty space
+         *
+         *      uses TranspositionTable to avoid generating State objects more
+         *      than once
+         *
+         *      I: letter-the letter representing the player whose turn it is
+         *      O: populate the children list of the State
+         *         returns the State to support chained calls
+         */
+        generateChildren: function(letter) {
+            var i, j, child;
+            var score = 0;
+            var scores = [];
+            var terminal, filled
+
+            terminal = this.isTerminal();
+            filled = this.isFilled();
+
+            if (!terminal && !filled) {
+                for (i = 0; i < this.board.length; i++) {
+                    for (j = 0; j < this.board[i].length; j++) {
+                        if (this.board[i][j] == " ") {
+                            child = State().copySet(this.board, i, j, letter);
+
+                            if (State.transposTable.isIn(child.toString())) {
+                                child = State.transposTable.get(child.toString());
+                            } else {
+                                child.generateChildren(letter == "X" ? "O" : "X");
+                                State.transposTable.add(child);
+                            }
+
+                            scores.push(child.score);
+                            this.children.push(child);
+                        }
+                    }
+                }
+            } else if (terminal) { /* leaf scores */
+                if (letter == "X") {
+                    this.score = -1;
+                } else {
+                    this.score = 1;
+                }
+            } else { /* filled aka tie */
+                this.score = 0;
+            }
+            
+            return this;
+        },
+
+        /*  isTerminal
+         *      determine if the State is terminal (win/lose)
+         *
+         *      I:
+         *      O: true if board is terminal otherwise false
+         */
+        isTerminal: function () {
+            var i, j, k;
+            var indexLists = []
+            dimensions = this.board.length;
+
+            if (this.isTerminal.indexLists == undefined) {
+                //build -in a row- lists and compare
+                //index lists based on dimensions
+                //horizontal
+                for (i = 0; i < dimensions; i++) {
+                    indexLists.push([]);
+                    for (j = 0; j < dimensions; j++) {
+                        indexLists[i].push({"row": i, "col": j});
+                    }
+                }
+
+                for (i = 0; i < dimensions; i++) {
+                    indexLists.push([]);
+                    for (j = 0; j < dimensions; j++) {
+                        indexLists[indexLists.length-1].push({"row": j, "col": i});
+                    }
+                }
+
+                indexLists.push([]);
+                indexLists.push([]);
+                for (i = 0; i < dimensions; i++) {
+                    indexLists[indexLists.length - 1].push({"row": i, "col": i});
+                    indexLists[indexLists.length - 2].push({"row": i, "col": dimensions-1-i});
+                }
+            } else {
+                indexLists = this.isTerminal.indexLists;
+            }
+
+            //check
+            var c, match;
+            for (k = 0; k < indexLists.length; k++) {
+                c = this.board[indexLists[k][0].row][indexLists[k][0].col];
+                match = true;
+
+                if (c != " ") {
+                    for (i = 1; i < indexLists[k].length; i++) {
+                        if (this.board[indexLists[k][i].row][indexLists[k][i].col] != c) {
+                            match = false;
+                            break;
+                        }
+                    }
+
+                    if (match) {
+                        return true;
+                    }
+                }
+
+            }
+
+            return false;
+        },
+
+        /*  isFilled
+         *      determine if the board is full
+         *
+         *      I:
+         *      O: return true if board is full otherwise return false
+         */
+        isFilled: function () {
+            var i, j;
+
+            for (i = 0; i < this.board.length; i++) {
+                for (j = 0; j < this.board[i].length; j++) {
+                    if (this.board[i][j] == " ") {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        },
+
+        /*  toString
+         *      generate string representation of the board
+         *
+         *      I:
+         *      O: return the characters in the board list as a string
+         */
+        toString: function() {
+            var i, j;
+            var s = ""
+            
+            for (i = 0; i < this.board.length; i++) {
+                for (j = 0; j < this.board[i].length; j++) {
+                    s += this.board[i][j];
+                }
+            }
+
+            return s;
+        },
+
+        /*  getOptimalMove aka minimax
+         *      perform the minimax algorithm on the State tree rooted at
+         *      this node
+         *
+         *      I: letter-the letter representing whether the searcher is the
+         *         minimizing or maximizing player
+         *      O: return the best score in the tree
+         */
+        getOptimalMove: function (letter) {
+            var i, bestScore;
+
+            if (this.score != undefined) { /* leaf node */
+                return this.score;
+            } else if (letter == "X") {
+                bestScore = -2;
+
+                for (i = 0; i < this.children.length; i++) {
+                    bestScore = Math.max(bestScore, 
+                                         this.children[i].getOptimalMove("O"));
+                }
+            } else { /*letter == "O" */
+                bestScore = 2;
+
+                for (i = 0; i < this.children.length; i++) {
+                    bestScore = Math.min(bestScore,
+                                         this.children[i].getOptimalMove("X"));
+                }
+            }
+
+            return bestScore;
+        },
+
+        board: this.board,
+    }
+};
+//add static TranspositionTable
+State.transposTable = TranspositionTable();
+
 var Player = Backbone.Model.extend({
 });
 
@@ -24,6 +331,9 @@ var Game = Backbone.Model.extend({
         //create players
         this.set({human: new HumanPlayer()});
         this.set({computer: new ComputerPlayer()});
+        this.set({stateTree: State().init(this.get("dimensions"))});
+        this.set({stateTreeRoot: this.get("stateTree")});
+        this.get("stateTree").generateChildren("X");
         this.start();
     },
 
@@ -33,7 +343,7 @@ var Game = Backbone.Model.extend({
         for (i = 0; i < this.get("dimensions"); i++) {
             this.get("board").push([]);
             for (j = 0; j < this.get("dimensions"); j++) {
-                this.get("board")[i].push({"text": "", "id": i*this.get("dimensions") + j});
+                this.get("board")[i].push({"text": " ", "id": i*this.get("dimensions") + j});
             }
         }
     },
@@ -43,10 +353,21 @@ var Game = Backbone.Model.extend({
     },
 
     onClick: function(event) {
-        console.log("You clicked on id: "+event.target.id+" text: "+event.target.innerHTML);
-
+        var i;
         var space = this.getSpaceFromId(Number(event.target.id));
-        if (space.text == "" && this.get("turn") == this.get("human").get("letter")) {
+        stateTree = this.get("stateTree");
+        board = this.get("board");
+
+        if (stateTree.isTerminal() || stateTree.isFilled()) {
+            this.set({"stateTree": this.get("stateTreeRoot")});
+            this.set({"turn": "X"});
+
+            for (i = 0; i < board.length; i++) {
+                for (j = 0; j < board[i].length; j++) {
+                    board[i][j].text = " ";
+                }
+            }
+        } else if (space.text == " " && this.get("turn") == this.get("human").get("letter")) {
             space.text = this.get("turn");
 
             //switch turn
@@ -56,9 +377,60 @@ var Game = Backbone.Model.extend({
                 this.set({turn: "X"});
             }
 
-            //tell computer to choose
+            //update stateTree to use new root (should be in children)
+            for (i = 0; i < stateTree.children.length; i++) {
+                if (this.boardToString() == stateTree.children[i].toString()) {
+                    stateTree = stateTree.children[i];
+                    break;
+                }
+            }
+
             //TODO: add pause?
+            var score;
+
+            for (i = 0; i < stateTree.children.length; i++) {
+                score = stateTree.children[i].getOptimalMove(this.get("turn") == "O" ? "X" : "O");
+                
+                if (score == 1 && this.get("turn") == "X") {
+                    stateTree = stateTree.children[i];
+                    break;
+                } else if ((score == -1 || score == 0) && this.get("turn") == "O") {
+                    stateTree = stateTree.children[i];
+                    break;
+                }
+            }
+
+            this.set({"stateTree": stateTree});
+
+            for (i = 0; i < stateTree.board.length; i++) {
+                for (j = 0; j < stateTree.board[i].length; j++) {
+                    if (stateTree.board[i][j] != this.get("board")[i][j].text) {
+                        this.get("board")[i][j].text = this.get("computer").get("letter");
+                    }
+                }
+            }
+
+            if (this.get("turn") == "X") {
+                this.set({turn: "O"});
+            } else {
+                this.set({turn: "X"});
+            }
+
         }
+    },
+
+    boardToString: function () {
+        var i, j;
+        var s = "";
+        board = this.get("board");
+        
+        for (i = 0; i < board.length; i++) {
+            for (j = 0; j < board[i].length; j++) {
+                s += board[i][j].text;
+            }
+        }
+
+        return s;
     }
 });
 
@@ -79,6 +451,16 @@ var BoardView = Backbone.View.extend({
         var html = Mustache.to_html(this.template, this.model.toJSON());
         this.$el.html(html);
     },
+
+    getScoreIfOver: function () {
+        stateTree = this.model.get("stateTree");
+
+        if (stateTree.isTerminal()) {
+            return stateTree.score;
+        } else if (stateTree.isFilled()) {
+            return 0;
+        }
+    },
     
     onClick: function(event) {
         //delegate to game model
@@ -87,17 +469,47 @@ var BoardView = Backbone.View.extend({
     }
 });
 
-var AppView = Backbone.View.extend({
-    el: "#container",
-    board: new BoardView(),
+var MessageView =  Backbone.View.extend({
+    el: "#message",
+    message: "",
 
-    initialize: function() {
+    initialize: function () {
         this.render();
     },
 
+    render: function () {
+        var html = this.message;
+        this.$el.html(html);
+    },
+
+    updateMessage: function (score) {
+        if (score == 0) {
+            this.message = "Game over. Tie. Click to play again";
+        } else if (score == -1) {
+            this.message = "Game over. Computer wins. Click to play again";
+        } else if (score == 1) {
+            this.message = "Game over. Player wins. Click to play again";
+        } else {
+            this.message = "";
+        }
+    }
+});
+
+var AppView = Backbone.View.extend({
+    el: "#container",
+    board: new BoardView(),
+    message: new MessageView(),
+
+    initialize: function() {
+        this.listenTo(this.board.model, "change", this.render);
+        this.render();
+    },
 
     render: function() {
+        this.message.updateMessage(this.board.getScoreIfOver());
+
         this.board.render();
+        this.message.render();
     }
 });
 
